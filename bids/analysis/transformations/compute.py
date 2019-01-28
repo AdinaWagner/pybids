@@ -21,6 +21,7 @@ class Convolve(Transformation):
         dispersion (bool): Whether or not to include the dispersion derivative.
         fir_delays (iterable): A list or iterable of delays to use if model is
             'fir' (ignored otherwise). Spacing between delays must be fixed.
+        sampling_rate (float): Sampling rate (in Hz) to use in convolution
 
     Note: Uses the HRF convolution functions implemented in nistats.
     """
@@ -33,8 +34,13 @@ class Convolve(Transformation):
 
         model = model.lower()
 
+        post_resample = False
         if isinstance(var, SparseRunVariable):
             sr = self.collection.sampling_rate
+            min_sampling_rate = 1 / var.duration.min()
+            if min_sampling_rate > sr:
+                sr = min_sampling_rate
+                post_resample = True
             var = var.to_dense(sr)
 
         df = var.to_df(entities=False)
@@ -52,9 +58,14 @@ class Convolve(Transformation):
         convolved = hrf.compute_regressor(vals, model, onsets,
                                           fir_delays=fir_delays, min_onset=0)
 
-        return DenseRunVariable(var.name, convolved[0],
+        var = DenseRunVariable(var.name, convolved[0],
             var.run_info, var.source,
             var.sampling_rate)
+
+        if post_resample:
+            var.resample(sampling_rate=self.collection.sampling_rate, inplace=True)
+
+        return var
 
 
 class Demean(Transformation):
